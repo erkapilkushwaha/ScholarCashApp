@@ -1,22 +1,26 @@
 {
   "expo": {
-    "name": "      ",
+    "name": "ScholarCash",
     "slug": "ScholarCash",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
-    
-    // 🎯 SPLASH SCREEN SYSTEM: Cover mode applied to stretch over the frame
+
     "splash": {
-      "image": "./assets/main-scholar-splash.png", 
-      "resizeMode": "cover",             // ✨ Changed from contain to cover
-      "backgroundColor": "#ffffff"         
+      "image": "./assets/main-scholar-splash.png",
+      "resizeMode": "cover",
+      "backgroundColor": "#ffffff"
     },
+
     "ios": {
+      "bundleIdentifier": "com.scholarcash.app",
       "supportsTablet": true
     },
+
     "android": {
+      "package": "com.scholarcash.app",
+      "versionCode": 1,
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
         "foregroundImage": "./assets/android-icon-foreground.png",
@@ -24,8 +28,13 @@
         "monochromeImage": "./assets/android-icon-monochrome.png"
       }
     },
+
     "web": {
       "favicon": "./assets/favicon.png"
-    }
+    },
+
+    "plugins": [
+      "expo-font"
+    ]
   }
 }

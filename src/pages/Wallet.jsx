@@ -8,7 +8,6 @@ import {
 
 import { supabase } from '../config/supabaseClient';
 
-// Components
 import PremiumBalanceCard from '../components/wallet_elements/PremiumBalanceCard';
 import QuickActions from '../components/wallet_elements/QuickActions';
 import WalletStatsOverview from '../components/wallet_elements/WalletStatsOverview';
@@ -26,21 +25,19 @@ export default function Wallet({
   openWithdrawPanel
 }) {
 
-  // ---------------- STATES ----------------
   const [profileData, setProfileData] = useState(null);
   const [loading, setLoading] = useState(true);
-
   const [transactionStatus, setTransactionStatus] = useState('verified');
   const [withdrawnAmount, setWithdrawnAmount] = useState('0');
-
   const [isPanelVisible, setIsPanelVisible] = useState(false);
 
   const scrollViewRef = useRef(null);
   const [panelY, setPanelY] = useState(0);
 
-  // ---------------- OPEN PANEL FUNCTION ----------------
+  // ✅ Hide bottom nav when withdrawal panel opens
   const openWithdrawPanelFn = () => {
     setIsPanelVisible(true);
+    setHideBottomNav?.(true);
 
     requestAnimationFrame(() => {
       setTimeout(() => {
@@ -54,14 +51,19 @@ export default function Wallet({
     });
   };
 
-  // ---------------- HOME TRIGGER (IMPORTANT FIX) ----------------
+  // ✅ Show bottom nav when panel closes
+  const closeWithdrawPanel = () => {
+    setIsPanelVisible(false);
+    setHideBottomNav?.(false);
+  };
+
   useEffect(() => {
     if (openWithdrawPanel) {
       openWithdrawPanelFn();
     }
   }, [openWithdrawPanel]);
 
-  // ---------------- WALLET DATA FETCH ----------------
+  // ✅ FIXED: Removed hardcoded fallback user ID
   useEffect(() => {
     async function fetchWalletLiveEngine() {
       try {
@@ -69,21 +71,23 @@ export default function Wallet({
 
         const { data: { user }, error } = await supabase.auth.getUser();
 
-        const activeId =
-          error || !user
-            ? 'ee712d5e-eb59-4a60-a8fe-1d3d5bb38776'
-            : user.id;
+        // ✅ If no user session, show empty state — no hardcoded ID
+        if (error || !user) {
+          setProfileData(null);
+          setLoading(false);
+          return;
+        }
 
         const { data } = await supabase
           .from('profiles')
           .select('id, wallet_balance, total_earnings, total_withdrawal, pending_balance, full_name')
-          .eq('id', activeId)
+          .eq('id', user.id)
           .single();
 
         setProfileData(data || null);
 
       } catch (e) {
-        console.log(e);
+        console.log('Wallet fetch error:', e);
       } finally {
         setLoading(false);
       }
@@ -91,7 +95,14 @@ export default function Wallet({
 
     fetchWalletLiveEngine();
   }, []);
-  // ---------------- LOADING ----------------
+
+  // ✅ Show bottom nav again on back from success
+  const handleGoBackFromSuccess = () => {
+    setTransactionStatus('verified');
+    setIsPanelVisible(false);
+    setHideBottomNav?.(false);
+  };
+
   if (loading) {
     return (
       <View style={styles.centerLoader}>
@@ -100,7 +111,6 @@ export default function Wallet({
     );
   }
 
-  // ---------------- TRANSACTION LOADING ----------------
   if (transactionStatus === 'loading') {
     return (
       <TransactionLoading
@@ -109,23 +119,18 @@ export default function Wallet({
     );
   }
 
-  // ---------------- SUCCESS ----------------
   if (transactionStatus === 'success') {
     return (
       <TransactionSuccess
         amount={withdrawnAmount}
         verifiedName={profileData?.full_name}
         userId={profileData?.id}
-        onGoBack={() => {
-          setTransactionStatus('verified');
-          setIsPanelVisible(false);
-        }}
+        onGoBack={handleGoBackFromSuccess}
         navigation={navigation}
       />
     );
   }
 
-  // ---------------- MAIN UI ----------------
   return (
     <View style={styles.screenWrapper}>
       <ScrollView
@@ -144,19 +149,19 @@ export default function Wallet({
 
           <QuickActions
             onWithdraw={openWithdrawPanelFn}
-            onHistory={() => navigation.navigate('History')}
+            // ✅ FIXED: lowercase 'history' to match App.js
+            onHistory={() => navigation.navigate('history')}
           />
 
           {isPanelVisible && (
-            <View
-              onLayout={(e) => setPanelY(e.nativeEvent.layout.y)}
-            >
+            <View onLayout={(e) => setPanelY(e.nativeEvent.layout.y)}>
               <WithdrawalPannel
                 userId={profileData?.id}
                 userName={profileData?.full_name}
                 availableBalance={Number(profileData?.wallet_balance || 0)}
                 setGlobalStatus={setTransactionStatus}
                 setGlobalAmount={setWithdrawnAmount}
+                onClose={closeWithdrawPanel}
               />
             </View>
           )}
@@ -178,7 +183,6 @@ export default function Wallet({
   );
 }
 
-// ---------------- STYLES ----------------
 const styles = StyleSheet.create({
   screenWrapper: {
     flex: 1,
