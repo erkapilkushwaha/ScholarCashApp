@@ -1,130 +1,364 @@
-import React, { useState, useEffect } from 'react';
-import { StyleSheet, View, ScrollView, ActivityIndicator, Text } from 'react-native';
-import { supabase } from '../config/supabaseClient'; 
+import React, {
+  useEffect,
+  useState,
+  useMemo,
+} from 'react';
 
-// 🌐 Global Centralized Routing Hub Import Kiya
-import { navigationHub } from '../config/navigationHub';
+import {
+  View,
+  StyleSheet,
+  ScrollView,
+  ActivityIndicator,
+} from 'react-native';
 
-// 🚀 Saare 7 child components
+import { supabase } from '../config/supabaseClient';
+
 import HistoryHeader from '../components/history_elements/HistoryHeader';
-import HistoryFilterPills from '../components/history_elements/HistoryFilterPills';
-import HistorySearchBar from '../components/history_elements/HistorySearchBar';
-import AllFeedsList from '../components/history_elements/AllFeedsList';
-import WithdrawalFeedsList from '../components/history_elements/WithdrawalFeedsList';
-import SurveyFeedsList from '../components/history_elements/SurveyFeedsList';
-import OfferwallFeedsList from '../components/history_elements/OfferwallFeedsList';
+import SummaryCard from '../components/history_elements/SummaryCard';
+import FilterChips from '../components/history_elements/FilterChips';
+import SearchBar from '../components/history_elements/SearchBar';
+import ActivityTimeline from '../components/history_elements/ActivityTimeline';
+import EmptyState from '../components/history_elements/EmptyState';
 
 export default function History() {
-  const [dbTransactions, setDbTransactions] = useState([]);
-  const [loading, setLoading] = useState(true);
-  
-  // 🎯 FIX 1: Default state ko 'all' se badalkar 'global_all' kiya taaki landing par hamesha All Activities select rahe
-  const [activeTab, setActiveTab] = useState('global_all');
-  const [searchQuery, setSearchQuery] = useState('');
+  const [loading, setLoading] =
+    useState(true);
 
-  // 🔌 FILTER RECEIVER REGISTRATION
-  navigationHub.setHistoryTabPointer = setActiveTab;
+  const [profile, setProfile] =
+    useState(null);
+
+  const [activities, setActivities] =
+    useState([]);
+
+  const [activeFilter, setActiveFilter] =
+    useState('all');
+
+  const [searchQuery, setSearchQuery] =
+    useState('');
 
   useEffect(() => {
-    async function getTransactionLogs() {
-      try {
-        setLoading(true);
-        const { data, error } = await supabase
-          .from('transactions')
-          .select('*')
-          .order('created_at', { ascending: false });
-
-        if (error) throw error;
-        if (data) setDbTransactions(data);
-
-      } catch (err) {
-        console.log("History Backend Engine Fetch Error: ", err.message);
-      } finally {
-        setLoading(false);
-      }
-    }
-
-    getTransactionLogs();
-
-    const historyChannel = supabase
-      .channel('history-live-sync')
-      .on('postgres_changes', 
-        { event: '*', schema: 'public', table: 'transactions' }, 
-        () => {
-          getTransactionLogs(); 
-        }
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(historyChannel);
-    };
+    loadHistoryEngine();
   }, []);
 
-  const filteredData = dbTransactions.filter((tx) => {
-    const activityName = tx.activity?.toLowerCase() || '';
-    const txStatus = tx.status?.toLowerCase() || '';
-    const matchKeyword = searchQuery.toLowerCase();
+  async function loadHistoryEngine() {
+    try {
+      setLoading(true);
 
-    return activityName.includes(matchKeyword) || txStatus.includes(matchKeyword);
-  });
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
+      if (!user) {
+        setLoading(false);
+        return;
+      }
+
+      const userId = user.id;
+
+      const [
+        profileRes,
+        surveyRes,
+        earningsRes,
+        withdrawalsRes,
+        offerwallRes,
+      ] = await Promise.all([
+        supabase
+          .from('profiles')
+          .select('*')
+          .eq('id', userId)
+          .single(),
+
+        supabase
+          .from('survey_history')
+          .select('*')
+          .eq('user_id', userId),
+
+        supabase
+          .from('earnings')
+          .select('*')
+          .eq('user_id', userId),
+
+        supabase
+          .from('withdrawals')
+          .select('*')
+          .eq('user_id', userId),
+          
+          supabase
+  .from('offerwall_history')
+  .select('*')
+  .eq('user_id', userId),
+      ]);
+
+      setProfile(profileRes.data);
+
+      const surveys =
+        (surveyRes.data || []).map(
+          item => ({
+            id: item.id,
+            type: 'survey',
+            title:
+              item.survey_name ||
+              'Survey Activity',
+            subtitle:
+              item.provider_name,
+            amount:
+              item.amount_inr,
+            status:
+              item.status,
+            created_at:
+              item.created_at,
+          })
+        );
+
+      const earnings =
+        (earningsRes.data || []).map(
+          item => ({
+            id: item.id,
+            type: 'earning',
+            title:
+              item.title ||
+              'Reward Credited',
+            subtitle:
+              item.reward_type,
+            amount:
+              item.amount,
+            status:
+              item.status ||
+              'completed',
+            created_at:
+              item.created_at,
+          })
+        );
+
+      const withdrawals =
+        (
+          withdrawalsRes.data || []
+        ).map(item => ({
+          id: item.id,
+          type: 'withdrawal',
+          title:
+            'Withdrawal Request',
+          subtitle:
+            item.upi_id ||
+            'UPI Transfer',
+          amount:
+            item.amount,
+          status:
+            item.status,
+          created_at:
+            item.created_at,
+        }));
+        const offerwalls =
+  (offerwallRes.data || []).map(
+    item => ({
+      id: item.id,
+      type: 'offerwall',
+
+      title:
+        item.task_name ||
+        'Offerwall Task',
+
+      subtitle:
+        item.provider_code,
+
+      amount:
+        item.reward,
+
+      status:
+        item.status,
+
+      created_at:
+        item.created_at,
+    })
+  );
+
+      const merged = [
+  ...surveys,
+  ...offerwalls,
+  ...earnings,
+  ...withdrawals,
+];
+
+      merged.sort(
+        (a, b) =>
+          new Date(
+            b.created_at
+          ) -
+          new Date(
+            a.created_at
+          )
+      );
+
+      setActivities(merged);
+    } catch (err) {
+      console.log(
+        'History Error:',
+        err
+      );
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  const filteredActivities =
+    useMemo(() => {
+      let result =
+        [...activities];
+
+      if (
+        activeFilter ===
+        'surveys'
+      ) {
+        result =
+          result.filter(
+            item =>
+              item.type ===
+              'survey'
+          );
+      }
+
+      if (
+        activeFilter ===
+        'earnings'
+      ) {
+        result =
+          result.filter(
+            item =>
+              item.type ===
+              'earning'
+          );
+      }
+
+      if (
+        activeFilter ===
+        'withdrawals'
+      ) {
+        result =
+          result.filter(
+            item =>
+              item.type ===
+              'withdrawal'
+          );
+      }
+      if (
+  activeFilter ===
+  'offerwalls'
+) {
+  result =
+    result.filter(
+      item =>
+        item.type ===
+        'offerwall'
+    );
+}
+
+      if (
+        searchQuery.trim()
+      ) {
+        const query =
+          searchQuery.toLowerCase();
+
+        result =
+          result.filter(
+            item =>
+              item.title
+                ?.toLowerCase()
+                .includes(
+                  query
+                ) ||
+              item.subtitle
+                ?.toLowerCase()
+                .includes(
+                  query
+                ) ||
+              item.status
+                ?.toLowerCase()
+                .includes(
+                  query
+                )
+          );
+      }
+
+      return result;
+    }, [
+      activities,
+      activeFilter,
+      searchQuery,
+    ]);
 
   if (loading) {
     return (
-      <View style={styles.centerLoader}>
-        <ActivityIndicator size="large" color="#1a73e8" />
-        <Text style={styles.loadingText}>Loading Activity Feed...</Text>
+      <View
+        style={
+          styles.loaderContainer
+        }
+      >
+        <ActivityIndicator
+          size="large"
+          color="#2563eb"
+        />
       </View>
     );
   }
 
   return (
-    <View style={styles.screenWrapper}>
-      
-      {/* 👤 1. Header */}
-      <HistoryHeader totalCount={filteredData.length} />
+    <View style={styles.screen}>
 
-      {/* 💊 2. Filter Pills */}
-      <HistoryFilterPills activeTab={activeTab} onTabChange={setActiveTab} />
+      <ScrollView
+        showsVerticalScrollIndicator={
+          false
+        }
+      >
+        <HistoryHeader
+          totalActivities={
+            filteredActivities.length
+          }
+        />
 
-      {/* 🔍 3. Search Bar */}
-      <HistorySearchBar searchQuery={searchQuery} onSearchChange={setSearchQuery} />
+        <SummaryCard
+          walletBalance={
+            profile?.wallet_balance
+          }
+          todayEarnings={
+            profile?.today_earnings
+          }
+          totalEarnings={
+            profile?.total_earnings
+          }
+          totalWithdrawals={
+            profile?.total_withdrawal
+          }
+          todaySurveys={
+            profile?.today_surveys_count
+          }
+        />
 
-      {/* 📜 4. Dynamic Feed Component Lists */}
-      <ScrollView style={styles.scrollCanvas} showsVerticalScrollIndicator={false}>
-        <View style={styles.listBodyPad}>
-          
-          {/* 📑 Case 1: Default State (Poori mixed activities screen par map hongi) */}
-          {activeTab === 'global_all' && (
-            <AllFeedsList transactions={filteredData} />
-          )}
+        <FilterChips
+          activeFilter={
+            activeFilter
+          }
+          onFilterChange={
+            setActiveFilter
+          }
+        />
 
-          {/* 🏦 Case 2: Dropdown Option - All Transactions (Sirf len-den mix data) */}
-          {activeTab === 'all' && (
-            <WithdrawalFeedsList transactions={filteredData.filter(tx => tx.type === 'credit' || tx.type === 'debit')} />
-          )}
-          
-          {/* 📈 Case 3: Dropdown Option - Credits (+₹ Wallet Money Logs) */}
-          {activeTab === 'credits' && (
-            <WithdrawalFeedsList transactions={filteredData.filter(tx => tx.type === 'credit')} />
-          )}
-          
-          {/* 💸 Case 4: Dropdown Option - Withdrawals (-₹ Settlement Logs) */}
-          {activeTab === 'withdrawals' && (
-            <WithdrawalFeedsList transactions={filteredData.filter(tx => tx.type === 'debit')} />
-          )}
-          
-          {/* 📝 Case 5: Pure Surveys submission tracking logs */}
-          {activeTab === 'surveys' && (
-            <SurveyFeedsList transactions={filteredData} />
-          )}
-          
-          {/* 🎯 Case 6: Pure Offerwalls milestones logs */}
-          {activeTab === 'offerwalls' && (
-            <OfferwallFeedsList transactions={filteredData} />
-          )}
+        <SearchBar
+          value={searchQuery}
+          onChangeText={
+            setSearchQuery
+          }
+        />
 
-        </View>
+        {filteredActivities.length ===
+        0 ? (
+          <EmptyState />
+        ) : (
+          <ActivityTimeline
+            activities={
+              filteredActivities
+            }
+          />
+        )}
       </ScrollView>
 
     </View>
@@ -132,30 +366,19 @@ export default function History() {
 }
 
 const styles = StyleSheet.create({
-  screenWrapper: {
+  screen: {
     flex: 1,
-    backgroundColor: '#ffffff', 
+    backgroundColor:
+      '#f8fafc',
   },
-  scrollCanvas: {
+
+  loaderContainer: {
     flex: 1,
-    backgroundColor: '#f8fafc', 
-  },
-  listBodyPad: {
-    paddingHorizontal: 20,
-    paddingTop: 14,
-  },
-  centerLoader: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#ffffff',
-  },
-  loadingText: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#64748b',
-    marginTop: 10,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
+    justifyContent:
+      'center',
+    alignItems:
+      'center',
+    backgroundColor:
+      '#f8fafc',
   },
 });

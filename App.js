@@ -1,20 +1,27 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { StyleSheet, SafeAreaView, View, ActivityIndicator, Image, Animated, Dimensions, TouchableWithoutFeedback } from 'react-native'; 
-import * as SplashScreen from 'expo-splash-screen'; 
+import {
+  StyleSheet,
+  SafeAreaView,
+  View,
+  ActivityIndicator,
+  Image,
+  Animated,
+  Dimensions,
+  TouchableWithoutFeedback
+} from 'react-native';
+
+import * as SplashScreen from 'expo-splash-screen';
 import { supabase } from './src/config/supabaseClient';
 
-// 🌐 App Language Localization Configuration Engine
-import './src/localization/i18n'; 
+import './src/localization/i18n';
 
-// 📄 Existing Stacks & Pages Imports
-import Home from './src/pages/Home'; 
-import Wallet from './src/pages/Wallet'; 
-import History from './src/pages/History'; 
+import Home from './src/pages/Home';
+import Wallet from './src/pages/Wallet';
+import History from './src/pages/History';
 import AuthScreen from './src/pages/AuthScreen';
 import OtpVerification from './src/pages/OtpVerification';
-import ForgotPasswordScreen from './src/pages/ForgotPasswordScreen'; 
+import ForgotPasswordScreen from './src/pages/ForgotPasswordScreen';
 
-// 🆕 Newly Added Pages from File Tree
 import SidebarMenu from './src/pages/SidebarMenu';
 import SettingsScreen from './src/pages/SettingsScreen';
 import ChangePasswordScreen from './src/pages/ChangePasswordScreen';
@@ -25,15 +32,22 @@ import AboutUsScreen from './src/pages/AboutUsScreen';
 import SupportScreen from './src/pages/SupportScreen';
 import ContactUsScreen from './src/pages/ContactUsScreen';
 import ViewProfileScreen from './src/pages/ViewProfileScreen';
-import CompleteProfileScreen from './src/pages/CompleteProfileScreen'; 
+import CompleteProfileScreen from './src/pages/CompleteProfileScreen';
+import SurveyScreen from './src/pages/SurveyScreen';
 
-// 🧭 Components & Helpers Imports
-import BottomNavWidget from './src/components/BottomNavWidget'; 
+// ✅ NEW: OfferwallScreen
+import OfferwallScreen from './src/pages/OfferwallScreen';
+
+// ✅ NEW: NotificationScreen
+import NotificationScreen from './src/pages/NotificationScreen';
+
+import BottomNavWidget from './src/components/BottomNavWidget';
 import CompleteProfilePopup from './src/components/home_elements/CompleteProfilePopup';
 import { navigationHub } from './src/config/navigationHub';
+import OfferWebView from './src/pages/OfferWebView';
 
 const { width } = Dimensions.get('window');
-const SIDEBAR_WIDTH = width * 0.80; 
+const SIDEBAR_WIDTH = width * 0.80;
 
 SplashScreen.preventAutoHideAsync().catch(() => {});
 
@@ -43,11 +57,14 @@ export default function App() {
   const [activeTab, setActiveTab] = useState('auth_screen');
   const [showProfilePopup, setShowProfilePopup] = useState(false);
   const [currentOtpParams, setCurrentOtpParams] = useState(null);
-
+  const [openWithdrawPanel, setOpenWithdrawPanel] = useState(false);
+  const [webViewUrl, setWebViewUrl] = useState('');
+  const [webViewTitle, setWebViewTitle] = useState('');
+  const [hideBottomNav, setHideBottomNav] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-  const slideAnim = useRef(new Animated.Value(width)).current; 
-
+  const slideAnim = useRef(new Animated.Value(width)).current;
   const activeTabRef = useRef(activeTab);
+
   useEffect(() => {
     activeTabRef.current = activeTab;
   }, [activeTab]);
@@ -75,12 +92,16 @@ export default function App() {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, currentSession) => {
       if (currentSession) {
         setSession(currentSession);
+
         if (event === 'PASSWORD_RECOVERY' || event === 'USER_UPDATED') {
           setActiveTab('forgot_password');
         } else {
           const currentTab = activeTabRef.current;
-          if (currentTab === 'changepasswordscreen' || currentTab === 'changepasswording') {
-            console.log("Password state change detected inside setting engine. Redirection bypassed successfully.");
+          if (
+            currentTab === 'changepasswordscreen' ||
+            currentTab === 'changepasswording'
+          ) {
+            console.log('Password state change detected. Redirection bypassed.');
           } else {
             setActiveTab('home');
             checkUserProfileStatus(currentSession.user.id);
@@ -105,18 +126,23 @@ export default function App() {
         .eq('id', userId)
         .single();
 
-      if (!error && data && data.is_profile_complete === false && activeTabRef.current !== 'auth_screen') {
+      if (
+        !error &&
+        data &&
+        data.is_profile_complete === false &&
+        activeTabRef.current !== 'auth_screen'
+      ) {
         setShowProfilePopup(true);
       }
     } catch (err) {
-      console.log("Profile Status Check Error: ", err.message);
+      console.log('Profile Status Check Error: ', err.message);
     }
   };
 
   const openSidebar = () => {
     setIsSidebarOpen(true);
     Animated.timing(slideAnim, {
-      toValue: width - SIDEBAR_WIDTH, 
+      toValue: width - SIDEBAR_WIDTH,
       duration: 300,
       useNativeDriver: true,
     }).start();
@@ -124,17 +150,24 @@ export default function App() {
 
   const closeSidebar = () => {
     Animated.timing(slideAnim, {
-      toValue: width, 
+      toValue: width,
       duration: 250,
       useNativeDriver: true,
     }).start(() => setIsSidebarOpen(false));
   };
 
+  const openWebView = (url, title) => {
+    setWebViewUrl(url);
+    setWebViewTitle(title || 'Offer');
+    setActiveTab('offerwebview');
+  };
+
   const handleNavigation = (targetPage, params = null) => {
-    closeSidebar(); 
+    closeSidebar();
+    // ✅ FIXED: all lowercase for consistency
     const target = targetPage.toLowerCase();
 
-    if (target === 'otpverification') {
+    if (target === 'otpverification' || target === 'otp_verification') {
       setCurrentOtpParams(params);
       setActiveTab('otp_verification');
     } else if (target === 'goback') {
@@ -147,8 +180,8 @@ export default function App() {
   if (authLoading) {
     return (
       <View style={styles.customSplashCanvas}>
-        <Image 
-          source={require('./assets/main-scholar-splash.png')} 
+        <Image
+          source={require('./assets/main-scholar-splash.png')}
           style={styles.customSplashImage}
           resizeMode="contain"
         />
@@ -160,83 +193,131 @@ export default function App() {
   }
 
   const navigationProp = {
-    navigate: (page) => handleNavigation(page),
-    replace: (page) => handleNavigation(page), 
+    navigate: (page, params) => handleNavigation(page, params),
+    replace: (page) => handleNavigation(page),
     goBack: () => handleNavigation('goback'),
-    reset: ({ routes }) => handleNavigation(routes[0].name)
+    reset: ({ routes }) => handleNavigation(routes[0].name),
+  };
+
+  const renderScreen = () => {
+    if (!session) {
+      switch (activeTab) {
+        case 'otp_verification':
+          return <OtpVerification route={{ params: currentOtpParams }} navigation={navigationProp} />;
+        case 'forgot_password':
+          return <ForgotPasswordScreen navigation={navigationProp} />;
+        case 'privacypolicyscreen':
+          return <PrivacyPolicyScreen navigation={navigationProp} />;
+        case 'termsconditionsscreen':
+          return <TermsConditionsScreen navigation={navigationProp} />;
+        case 'aboutusscreen':
+          return <AboutUsScreen navigation={navigationProp} />;
+        case 'supportscreen':
+          return <SupportScreen navigation={navigationProp} />;
+        case 'contactusscreen':
+          return <ContactUsScreen navigation={navigationProp} />;
+        default:
+          return <AuthScreen navigation={navigationProp} />;
+      }
+    }
+
+    // Authenticated screens
+    switch (activeTab) {
+      case 'home':
+        return (
+          <Home
+            navigation={navigationProp}
+            onNavigateToWallet={() => {
+              setOpenWithdrawPanel(true);
+              setActiveTab('wallet');
+            }}
+            openWebView={openWebView}
+          />
+        );
+      case 'wallet':
+        return (
+          <Wallet
+            navigation={navigationProp}
+            setHideBottomNav={setHideBottomNav}
+            openWithdrawPanel={openWithdrawPanel}
+          />
+        );
+      case 'history':
+        return <History navigation={navigationProp} />;
+
+      case 'surveyscreen':
+        return <SurveyScreen navigation={navigationProp} openWebView={openWebView} />;
+
+      // ✅ NEW: OfferwallScreen
+      case 'offerwallscreen':
+        return <OfferwallScreen navigation={navigationProp} openWebView={openWebView} />;
+
+      // ✅ NEW: NotificationScreen
+      case 'notificationscreen':
+        return <NotificationScreen navigation={navigationProp} />;
+
+      case 'offerwebview':
+        return (
+          <OfferWebView
+            url={webViewUrl}
+            title={webViewTitle}
+            onBack={() => setActiveTab('home')}
+          />
+        );
+      case 'settingsscreen':
+        return <SettingsScreen navigation={navigationProp} />;
+      case 'changepasswording':
+      case 'changepasswordscreen':
+        return <ChangePasswordScreen navigation={navigationProp} />;
+      case 'deleteaccountscreen':
+        return <DeleteAccountScreen navigation={navigationProp} />;
+      case 'privacypolicyscreen':
+        return <PrivacyPolicyScreen navigation={navigationProp} />;
+      case 'termsconditionsscreen':
+        return <TermsConditionsScreen navigation={navigationProp} />;
+      case 'aboutusscreen':
+        return <AboutUsScreen navigation={navigationProp} />;
+      case 'supportscreen':
+        return <SupportScreen navigation={navigationProp} />;
+      case 'contactusscreen':
+        return <ContactUsScreen navigation={navigationProp} />;
+      case 'viewprofilescreen':
+        return <ViewProfileScreen navigation={navigationProp} />;
+      case 'completeprofile':
+        return <CompleteProfileScreen navigation={navigationProp} />;
+      default:
+        return (
+          <Home
+            navigation={navigationProp}
+            openWebView={openWebView}
+          />
+        );
+    }
   };
 
   return (
     <SafeAreaView style={styles.container}>
-      
+
       <View style={styles.mainContent}>
-        {/* 🆕 Lowercase routing tags check integration for un-authenticated session rendering */}
-        {!session ? (
-          activeTab === 'otp_verification' ? (
-            <OtpVerification route={{ params: currentOtpParams }} navigation={navigationProp} />
-          ) : activeTab === 'forgot_password' ? (
-            <ForgotPasswordScreen navigation={navigationProp} />
-          ) : activeTab === 'privacypolicyscreen' ? (
-            <PrivacyPolicyScreen navigation={navigationProp} />
-          ) : activeTab === 'termsconditionsscreen' ? (
-            <TermsConditionsScreen navigation={navigationProp} />
-          ) : activeTab === 'aboutusscreen' ? (
-            <AboutUsScreen navigation={navigationProp} />
-          ) : activeTab === 'supportscreen' ? (
-            <SupportScreen navigation={navigationProp} />
-          ) : activeTab === 'contactusscreen' ? (
-            <ContactUsScreen navigation={navigationProp} />
-          ) : (
-            <AuthScreen navigation={navigationProp} />
-          )
-        ) : (
-          /* Authenticated Pages Routing Matrix */
-          activeTab === 'home' ? (
-            <Home onNavigateToWallet={() => setActiveTab('wallet')} />
-          ) : activeTab === 'wallet' ? (
-            <Wallet navigation={navigationProp} />
-          ) : activeTab === 'history' ? (
-            <History /> 
-          ) : activeTab === 'settingsscreen' ? (
-            <SettingsScreen navigation={navigationProp} />
-          ) : activeTab === 'changepasswording' || activeTab === 'changepasswordscreen' ? (
-            <ChangePasswordScreen navigation={navigationProp} />
-          ) : activeTab === 'deleteaccountscreen' ? (
-            <DeleteAccountScreen navigation={navigationProp} />
-          ) : activeTab === 'privacypolicyscreen' ? (
-            <PrivacyPolicyScreen navigation={navigationProp} />
-          ) : activeTab === 'termsconditionsscreen' ? (
-            <TermsConditionsScreen navigation={navigationProp} />
-          ) : activeTab === 'aboutusscreen' ? (
-            <AboutUsScreen navigation={navigationProp} />
-          ) : activeTab === 'supportscreen' ? (
-            <SupportScreen navigation={navigationProp} />
-          ) : activeTab === 'contactusscreen' ? (
-            <ContactUsScreen navigation={navigationProp} />
-          ) : activeTab === 'viewprofilescreen' ? (
-            <ViewProfileScreen navigation={navigationProp} />
-          ) : activeTab === 'completeprofile' ? (
-            <CompleteProfileScreen navigation={navigationProp} />
-          ) : (
-            <Home />
-          )
-        )}
+        {renderScreen()}
       </View>
 
-      {session && ['home', 'wallet', 'history'].includes(activeTab) && (
-        <View style={styles.navWrapper}>
-          <BottomNavWidget 
-            activeTab={activeTab} 
-            setActiveTab={(tab) => {
-              if (tab === 'profile') {
-                openSidebar(); 
-              } else {
-                setActiveTab(tab);
-              }
-            }} 
-          />
-        </View>
-      )}
+      {session &&
+        !hideBottomNav &&
+        ['home', 'wallet', 'history'].includes(activeTab) && (
+          <View style={styles.navWrapper}>
+            <BottomNavWidget
+              activeTab={activeTab}
+              setActiveTab={(tab) => {
+                if (tab === 'menu') {
+                  openSidebar();
+                } else {
+                  setActiveTab(tab);
+                }
+              }}
+            />
+          </View>
+        )}
 
       {isSidebarOpen && (
         <View style={styles.sidebarOverlay}>
@@ -244,33 +325,83 @@ export default function App() {
             <View style={styles.backdropTouchArea} />
           </TouchableWithoutFeedback>
 
-          <Animated.View style={[styles.sidebarAnimatedBox, { transform: [{ translateX: slideAnim }] }]}>
+          <Animated.View
+            style={[
+              styles.sidebarAnimatedBox,
+              { transform: [{ translateX: slideAnim }] }
+            ]}
+          >
             <SidebarMenu navigation={navigationProp} />
           </Animated.View>
         </View>
       )}
 
-      <CompleteProfilePopup 
-        visible={showProfilePopup && session && ['home', 'wallet', 'history'].includes(activeTab)}
-        onClose={() => setShowProfilePopup(false)} 
+      <CompleteProfilePopup
+        visible={
+          showProfilePopup &&
+          session &&
+          ['home', 'wallet', 'history'].includes(activeTab)
+        }
+        onClose={() => setShowProfilePopup(false)}
         onNavigate={() => {
           setShowProfilePopup(false);
           setActiveTab('completeprofile');
         }}
       />
-      
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#ffffff' },
-  mainContent: { flex: 1, marginBottom: 0 },
-  navWrapper: { width: '100%', backgroundColor: '#cbd5e1', zIndex: 99, elevation: 25 },
-  customSplashCanvas: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#ffffff' },
-  customSplashImage: { width: '85%', height: '85%' },
-  inlineLoaderWrapper: { position: 'absolute', bottom: 60 },
-  sidebarOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0, 0, 0, 0.4)', zIndex: 9999, flexDirection: 'row' },
-  backdropTouchArea: { flex: 1 },
-  sidebarAnimatedBox: { width: SIDEBAR_WIDTH, height: '100%', backgroundColor: '#fff', shadowColor: '#000', shadowOffset: { width: -2, height: 0 }, shadowOpacity: 0.2, shadowRadius: 5, elevation: 16 }
+  container: {
+    flex: 1,
+    backgroundColor: '#ffffff',
+  },
+  mainContent: {
+    flex: 1,
+    marginBottom: 0,
+  },
+  navWrapper: {
+    width: '100%',
+    backgroundColor: '#cbd5e1',
+    zIndex: 99,
+    elevation: 25,
+  },
+  customSplashCanvas: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#ffffff',
+  },
+  customSplashImage: {
+    width: '85%',
+    height: '85%',
+  },
+  inlineLoaderWrapper: {
+    position: 'absolute',
+    bottom: 60,
+  },
+  sidebarOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0,0,0,0.4)',
+    zIndex: 9999,
+    flexDirection: 'row',
+  },
+  backdropTouchArea: {
+    flex: 1,
+  },
+  sidebarAnimatedBox: {
+    width: SIDEBAR_WIDTH,
+    height: '100%',
+    backgroundColor: '#fff',
+    shadowColor: '#000',
+    shadowOffset: { width: -2, height: 0 },
+    shadowOpacity: 0.2,
+    shadowRadius: 5,
+    elevation: 16,
+  },
 });

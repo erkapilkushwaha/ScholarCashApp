@@ -4,11 +4,12 @@ import {
   Text,
   StyleSheet,
   ActivityIndicator,
+  TouchableOpacity,
 } from 'react-native';
 
 import { supabase } from '../../config/supabaseClient';
 
-export default function RecentActivityWidget({ userId }) {
+export default function RecentActivityWidget({ userId, navigation }) {
 
   const [activities, setActivities] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -17,9 +18,17 @@ export default function RecentActivityWidget({ userId }) {
     loadRecentActivities();
   }, [userId]);
 
+  const timeAgo = (date) => {
+    const diff = Math.floor((new Date() - new Date(date)) / 60000);
+
+    if (diff < 1) return 'Just now';
+    if (diff < 60) return `${diff}m ago`;
+    if (diff < 1440) return `${Math.floor(diff / 60)}h ago`;
+    return `${Math.floor(diff / 1440)}d ago`;
+  };
+
   async function loadRecentActivities() {
     try {
-
       const { data: earnings } = await supabase
         .from('earnings')
         .select('*')
@@ -34,38 +43,31 @@ export default function RecentActivityWidget({ userId }) {
         .order('created_at', { ascending: false })
         .limit(5);
 
-      const earningItems =
-        (earnings || []).map(item => ({
-          id: item.id,
-          title: item.title,
-          amount: item.amount,
-          type: 'credit',
-          created_at: item.created_at,
-        }));
+      const earningItems = (earnings || []).map(item => ({
+        id: `e-${item.id}`,
+        title: item.title,
+        amount: item.amount,
+        type: 'credit',
+        status: 'Completed',
+        created_at: item.created_at,
+      }));
 
-      const withdrawalItems =
-        (withdrawals || []).map(item => ({
-          id: item.id,
-          title: 'Withdrawal Request',
-          amount: item.amount,
-          type: 'debit',
-          created_at: item.created_at,
-        }));
+      const withdrawalItems = (withdrawals || []).map(item => ({
+        id: `w-${item.id}`,
+        title: 'Withdrawal Request',
+        amount: item.amount,
+        type: 'debit',
+        status: item.status || 'Pending',
+        created_at: item.created_at,
+      }));
 
-      const merged = [
-        ...earningItems,
-        ...withdrawalItems,
-      ];
+      const merged = [...earningItems, ...withdrawalItems];
 
       merged.sort(
-        (a, b) =>
-          new Date(b.created_at) -
-          new Date(a.created_at)
+        (a, b) => new Date(b.created_at) - new Date(a.created_at)
       );
 
-      setActivities(
-        merged.slice(0, 5)
-      );
+      setActivities(merged.slice(0, 5));
 
     } catch (err) {
       console.log(err);
@@ -76,53 +78,81 @@ export default function RecentActivityWidget({ userId }) {
 
   if (loading) {
     return (
-      <ActivityIndicator
-        size="small"
-        color="#1a73e8"
-      />
+      <View style={styles.loader}>
+        <ActivityIndicator size="small" color="#2563eb" />
+      </View>
     );
   }
 
   return (
     <View style={styles.container}>
 
-      <Text style={styles.heading}>
-        Recent Activity
-      </Text>
+      {/* Header */}
+      <View style={styles.header}>
+        <Text style={styles.heading}>Recent Activity</Text>
 
+        <TouchableOpacity
+          onPress={() => navigation?.navigate('History')}
+        >
+          <Text style={styles.viewAll}>View All</Text>
+        </TouchableOpacity>
+      </View>
+
+      {/* Content */}
       {activities.length === 0 ? (
-        <Text style={styles.emptyText}>
-          No activity found
-        </Text>
+        <View style={styles.emptyBox}>
+          <Text style={styles.emptyText}>No transactions yet</Text>
+          <Text style={styles.emptySub}>
+            Your earnings and withdrawals will appear here
+          </Text>
+        </View>
       ) : (
         activities.map(item => (
-          <View
-            key={item.id}
-            style={styles.row}
-          >
+          <View key={item.id} style={styles.card}>
 
-            <View style={styles.left}>
+            {/* Icon */}
+            <View style={[
+              styles.iconBox,
+              item.type === 'credit'
+                ? styles.creditBg
+                : styles.debitBg
+            ]}>
+              <Text style={styles.icon}>
+                {item.type === 'credit' ? '↓' : '↑'}
+              </Text>
+            </View>
 
-              <Text style={styles.title}>
+            {/* Middle */}
+            <View style={styles.middle}>
+              <Text style={styles.title} numberOfLines={1}>
                 {item.title}
               </Text>
 
-              <Text style={styles.date}>
-                {new Date(
-                  item.created_at
-                ).toLocaleDateString()}
-              </Text>
+              <View style={styles.metaRow}>
+                <Text style={styles.time}>
+                  {timeAgo(item.created_at)}
+                </Text>
 
+                <View style={[
+                  styles.badge,
+                  item.status === 'Completed'
+                    ? styles.badgeSuccess
+                    : styles.badgePending
+                ]}>
+                  <Text style={styles.badgeText}>
+                    {item.status}
+                  </Text>
+                </View>
+              </View>
             </View>
 
-            <Text
-              style={[
-                styles.amount,
-                item.type === 'credit'
-                  ? styles.credit
-                  : styles.debit,
-              ]}
-            >
+            {/* Amount */}
+            <Text style={[
+              styles.amount,
+              item.type === 'credit'
+                ? styles.credit
+                : styles.debit
+            ]}>
               {item.type === 'credit'
                 ? `+₹${item.amount}`
                 : `-₹${item.amount}`}
@@ -139,48 +169,111 @@ const styles = StyleSheet.create({
 
   container: {
     backgroundColor: '#fff',
-    borderRadius: 18,
-    padding: 18,
-    marginTop: 18,
+    borderRadius: 20,
+    padding: 16,
+    marginTop: 16,
     borderWidth: 1,
-    borderColor: '#e2e8f0',
+    borderColor: '#eef2f7',
+  },
+
+  loader: {
+    padding: 20,
+  },
+
+  header: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 12,
+    alignItems: 'center',
   },
 
   heading: {
-    fontSize: 17,
+    fontSize: 16,
     fontWeight: '800',
     color: '#0f172a',
-    marginBottom: 14,
   },
 
-  row: {
+  viewAll: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#2563eb',
+  },
+
+  card: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: 10,
+    paddingVertical: 12,
     borderBottomWidth: 1,
     borderBottomColor: '#f1f5f9',
   },
 
-  left: {
+  iconBox: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 10,
+  },
+
+  creditBg: {
+    backgroundColor: '#ecfdf5',
+  },
+
+  debitBg: {
+    backgroundColor: '#fef2f2',
+  },
+
+  icon: {
+    fontSize: 16,
+    fontWeight: '900',
+  },
+
+  middle: {
     flex: 1,
   },
 
   title: {
-    fontSize: 14,
-    fontWeight: '600',
+    fontSize: 13,
+    fontWeight: '700',
     color: '#1e293b',
   },
 
-  date: {
+  metaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 4,
+  },
+
+  time: {
     fontSize: 11,
     color: '#94a3b8',
-    marginTop: 2,
+    marginRight: 8,
+  },
+
+  badge: {
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+  },
+
+  badgeSuccess: {
+    backgroundColor: '#dcfce7',
+  },
+
+  badgePending: {
+    backgroundColor: '#fef3c7',
+  },
+
+  badgeText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#334155',
   },
 
   amount: {
-    fontSize: 14,
-    fontWeight: '800',
+    fontSize: 13,
+    fontWeight: '900',
   },
 
   credit: {
@@ -191,10 +284,21 @@ const styles = StyleSheet.create({
     color: '#ef4444',
   },
 
-  emptyText: {
-    textAlign: 'center',
-    color: '#94a3b8',
-    paddingVertical: 10,
+  emptyBox: {
+    paddingVertical: 20,
+    alignItems: 'center',
   },
 
+  emptyText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#94a3b8',
+  },
+
+  emptySub: {
+    fontSize: 11,
+    color: '#cbd5e1',
+    marginTop: 4,
+    textAlign: 'center',
+  },
 });
