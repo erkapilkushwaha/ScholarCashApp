@@ -1,7 +1,7 @@
 {
   "expo": {
     "name": "ScholarCash",
-    "slug": "ScholarCash",
+    "slug": "scholarcash",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -22,10 +22,8 @@
       "package": "com.scholarcash.app",
       "versionCode": 1,
       "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
-        "foregroundImage": "./assets/android-icon-foreground.png",
-        "backgroundImage": "./assets/android-icon-background.png",
-        "monochromeImage": "./assets/android-icon-monochrome.png"
+        "foregroundImage": "./assets/icon.png",
+        "backgroundColor": "#E6F4FE"
       }
     },
 
@@ -35,6 +33,12 @@
 
     "plugins": [
       "expo-font"
-    ]
+    ],
+
+    "extra": {
+      "eas": {
+        "projectId": "54d766b2-5f1a-4afa-ac3a-b35cdcc25bc9"
+      }
+    }
   }
 }
